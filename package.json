@@ -1,0 +1,13 @@
+{
+  "dependencies": {
+    "expo-router": "^55.0.13",
+    "lucide-react-native": "^1.11.0",
+    "react-native-qrcode-svg": "^6.3.21",
+    "react-native-svg": "^15.15.4",
+    "zustand": "^5.0.12"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.10",
+    "typescript": "~5.9.2"
+  }
+}
