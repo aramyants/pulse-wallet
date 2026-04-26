@@ -1,4 +1,6 @@
 import { Stack } from "expo-router";
+import { useEffect } from "react";
+import { useWalletStore } from "../src/store/walletStore";
 
 const colors = {
   bg: "#F7F1E8",
@@ -9,6 +11,18 @@ const colors = {
 };
 
 export default function RootLayout() {
+  const refreshWeather = useWalletStore((s) => s.refreshWeather);
+  const refreshEvents = useWalletStore((s) => s.refreshEvents);
+  const refreshLocation = useWalletStore((s) => s.refreshLocation);
+  const refreshDemand = useWalletStore((s) => s.refreshDemand);
+
+  useEffect(() => {
+    void refreshLocation();
+    void refreshWeather();
+    void refreshEvents();
+    void refreshDemand();
+  }, [refreshLocation, refreshWeather, refreshEvents, refreshDemand]);
+
   return (
     <Stack
       screenOptions={{

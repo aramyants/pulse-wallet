@@ -1,6 +1,8 @@
 import { Link } from "expo-router";
+import { useState } from "react";
 import { CheckCircle2, CircleSlash2, Clock3, QrCode, Wallet } from "lucide-react-native";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { validateTokenViaApi } from "../src/services/redeemApi";
 import { useWalletStore } from "../src/store/walletStore";
 
 const colors = {
@@ -17,6 +19,8 @@ const colors = {
 
 export default function RedeemScreen() {
   const { accepted, redeemed, expired, context, offer, redeemOffer, expireOffer } = useWalletStore();
+  const [apiStatus, setApiStatus] = useState<"idle" | "loading" | "ok" | "error">("idle");
+  const [apiMessage, setApiMessage] = useState<string | null>(null);
 
   const cashbackValue = `€${(offer.discount * 0.22).toFixed(2)}`;
 
@@ -30,6 +34,32 @@ export default function RedeemScreen() {
 
   const statusColor =
     status === "redeemed" ? colors.success : status === "expired" ? colors.danger : colors.accent;
+
+  const handleValidate = async () => {
+    setApiStatus("loading");
+    setApiMessage("Validating token via API...");
+
+    try {
+      const result = await validateTokenViaApi({
+        token: offer.token,
+        merchantId: context.merchant.id,
+      });
+
+      if (!result.ok) {
+        setApiStatus("error");
+        setApiMessage(result.message);
+        return;
+      }
+
+      redeemOffer();
+      setApiStatus("ok");
+      setApiMessage(`API validation successful (${result.code}).`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Could not reach redemption API.";
+      setApiStatus("error");
+      setApiMessage(message);
+    }
+  };
 
   return (
     <View style={styles.screen}>
@@ -68,11 +98,13 @@ export default function RedeemScreen() {
         </View>
 
         <TouchableOpacity
-          style={[styles.primaryButton, (!accepted || redeemed || expired) && styles.disabledButton]}
-          onPress={redeemOffer}
-          disabled={!accepted || redeemed || expired}
+          style={[styles.primaryButton, (!accepted || redeemed || expired || apiStatus === "loading") && styles.disabledButton]}
+          onPress={() => void handleValidate()}
+          disabled={!accepted || redeemed || expired || apiStatus === "loading"}
         >
-          <Text style={styles.primaryButtonText}>Validate token</Text>
+          <Text style={styles.primaryButtonText}>
+            {apiStatus === "loading" ? "Simulating checkout..." : "Simulate checkout & validate token"}
+          </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -82,6 +114,12 @@ export default function RedeemScreen() {
         >
           <Text style={styles.secondaryButtonText}>Mark expired</Text>
         </TouchableOpacity>
+
+        {apiMessage ? (
+          <Text style={[styles.apiMessage, apiStatus === "error" ? styles.apiError : styles.apiOk]}>
+            {apiMessage}
+          </Text>
+        ) : null}
       </View>
 
       <View style={styles.links}>
@@ -136,6 +174,9 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   secondaryButtonText: { color: colors.text, fontWeight: "700" },
+  apiMessage: { marginTop: 4, fontSize: 12 },
+  apiOk: { color: colors.success },
+  apiError: { color: colors.danger },
   disabledButton: { opacity: 0.5 },
   disabledSoft: { opacity: 0.6 },
   links: { flexDirection: "row", flexWrap: "wrap", gap: 8 },

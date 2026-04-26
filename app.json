@@ -1,0 +1,21 @@
+{
+  "expo": {
+    "name": "PulseWallet",
+    "slug": "pulse-wallet",
+    "scheme": "pulsewallet",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "assetBundlePatterns": ["**/*"],
+    "plugins": ["expo-router"],
+    "android": {
+      "permissions": ["ACCESS_FINE_LOCATION", "ACCESS_COARSE_LOCATION"],
+      "usesCleartextTraffic": true
+    },
+    "ios": {
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "PulseWallet uses your location to compute nearby merchant distance and generate relevant local offers."
+      }
+    }
+  }
+}

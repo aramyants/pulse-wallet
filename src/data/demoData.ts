@@ -121,3 +121,34 @@ export const eventDinnerScenario: DemoContext = {
     targetProduct: "Dinner bowl",
   },
 };
+
+export const yerevanBakeryScenario: DemoContext = {
+  city: "Yerevan",
+  weather: {
+    condition: "Sunny",
+    temperature: 19,
+  },
+  time: {
+    day: "Saturday",
+    hour: "13:10",
+    period: "Lunch walk",
+  },
+  user: {
+    name: "Mia",
+    distanceToMerchantMeters: 95,
+    movementIntent: "browsing",
+    preference: "sweet pastry",
+    abstractIntent: "nearby_browsing_sweet_pastry",
+  },
+  merchant: {
+    id: "yerevan-lavash-house",
+    name: "Lavash House Yerevan",
+    category: "Bakery",
+    currentDemand: "low",
+    transactionDensity: 28,
+    normalTransactionDensity: 74,
+    goal: "Increase noon pastry traffic",
+    maxDiscount: 17,
+    targetProduct: "Fresh gata",
+  },
+};

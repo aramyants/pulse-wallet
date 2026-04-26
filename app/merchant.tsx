@@ -1,6 +1,7 @@
 import { Link } from "expo-router";
-import { Activity, Gauge, ReceiptText, Settings2, Target, TrendingUp } from "lucide-react-native";
-import { ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { useEffect, useState } from "react";
+import { Activity, Gauge, RefreshCw, ReceiptText, Settings2, Target, TrendingUp } from "lucide-react-native";
+import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { useWalletStore } from "../src/store/walletStore";
 
 const colors = {
@@ -24,12 +25,51 @@ function MetricCard({ label, value }: { label: string; value: string }) {
 }
 
 export default function MerchantScreen() {
-  const { context, accepted, redeemed, offer } = useWalletStore();
+  const {
+    context,
+    accepted,
+    redeemed,
+    offer,
+    demandStatus,
+    demandSource,
+    demandError,
+    demandLastUpdated,
+    quietRatio,
+    refreshDemand,
+    updateMerchantRules,
+  } = useWalletStore();
   const generatedOffers = 1;
   const acceptedCount = accepted ? 1 : 0;
   const redeemedCount = redeemed ? 1 : 0;
   const acceptanceRate = `${Math.round((acceptedCount / generatedOffers) * 100)}%`;
   const quietThreshold = Math.round(context.merchant.normalTransactionDensity * 0.55);
+  const [goalInput, setGoalInput] = useState(context.merchant.goal);
+  const [maxDiscountInput, setMaxDiscountInput] = useState(String(context.merchant.maxDiscount));
+  const [targetProductInput, setTargetProductInput] = useState(context.merchant.targetProduct);
+  const [normalDensityInput, setNormalDensityInput] = useState(String(context.merchant.normalTransactionDensity));
+
+  useEffect(() => {
+    setGoalInput(context.merchant.goal);
+    setMaxDiscountInput(String(context.merchant.maxDiscount));
+    setTargetProductInput(context.merchant.targetProduct);
+    setNormalDensityInput(String(context.merchant.normalTransactionDensity));
+  }, [
+    context.merchant.goal,
+    context.merchant.maxDiscount,
+    context.merchant.targetProduct,
+    context.merchant.normalTransactionDensity,
+  ]);
+
+  const applyRules = () => {
+    const parsedDiscount = Number.parseInt(maxDiscountInput, 10);
+    const parsedNormal = Number.parseInt(normalDensityInput, 10);
+    updateMerchantRules({
+      goal: goalInput.trim() || context.merchant.goal,
+      maxDiscount: Number.isFinite(parsedDiscount) ? Math.min(40, Math.max(1, parsedDiscount)) : context.merchant.maxDiscount,
+      targetProduct: targetProductInput.trim() || context.merchant.targetProduct,
+      normalTransactionDensity: Number.isFinite(parsedNormal) ? Math.max(10, parsedNormal) : context.merchant.normalTransactionDensity,
+    });
+  };
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
@@ -55,7 +95,18 @@ export default function MerchantScreen() {
         <View style={styles.row}>
           <Gauge size={18} color={colors.accent} />
           <Text style={styles.cardTitle}>Demand Signal</Text>
+          <TouchableOpacity style={styles.iconButton} onPress={() => void refreshDemand()}>
+            <RefreshCw size={16} color={colors.accent} />
+          </TouchableOpacity>
         </View>
+        <Text style={styles.itemText}>
+          Feed source:{" "}
+          {demandStatus === "loading"
+            ? "loading..."
+            : demandSource === "payone-simulated"
+              ? "Payone simulated transaction feed"
+              : "demo fallback"}
+        </Text>
         <Text style={styles.itemText}>
           Current transaction density: {context.merchant.transactionDensity}
         </Text>
@@ -63,6 +114,15 @@ export default function MerchantScreen() {
           Normal transaction density: {context.merchant.normalTransactionDensity}
         </Text>
         <Text style={styles.itemText}>Current demand state: {context.merchant.currentDemand}</Text>
+        <Text style={styles.itemText}>Quiet ratio: {(quietRatio * 100).toFixed(1)}%</Text>
+        {demandLastUpdated ? (
+          <Text style={styles.itemText}>
+            Last feed update: {new Date(demandLastUpdated).toLocaleTimeString()}
+          </Text>
+        ) : null}
+        {demandError && demandStatus === "error" ? (
+          <Text style={styles.errorText}>{demandError}</Text>
+        ) : null}
       </View>
 
       <View style={styles.metricsRow}>
@@ -80,13 +140,16 @@ export default function MerchantScreen() {
           <Text style={styles.cardTitle}>Mock Rule Interface</Text>
         </View>
         <Text style={styles.fieldLabel}>Goal</Text>
-        <TextInput editable={false} style={styles.input} value={context.merchant.goal} />
+        <TextInput editable style={styles.input} value={goalInput} onChangeText={setGoalInput} />
         <Text style={styles.fieldLabel}>Max discount</Text>
-        <TextInput editable={false} style={styles.input} value={`${context.merchant.maxDiscount}%`} />
+        <TextInput editable style={styles.input} keyboardType="number-pad" value={maxDiscountInput} onChangeText={setMaxDiscountInput} />
         <Text style={styles.fieldLabel}>Target product</Text>
-        <TextInput editable={false} style={styles.input} value={context.merchant.targetProduct} />
-        <Text style={styles.fieldLabel}>Quiet threshold</Text>
-        <TextInput editable={false} style={styles.input} value={`${quietThreshold} transactions`} />
+        <TextInput editable style={styles.input} value={targetProductInput} onChangeText={setTargetProductInput} />
+        <Text style={styles.fieldLabel}>Normal transaction density baseline</Text>
+        <TextInput editable style={styles.input} keyboardType="number-pad" value={normalDensityInput} onChangeText={setNormalDensityInput} />
+        <TouchableOpacity style={styles.applyButton} onPress={applyRules}>
+          <Text style={styles.applyButtonText}>Apply merchant rules</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.card}>
@@ -135,8 +198,17 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   row: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 4 },
+  iconButton: {
+    marginLeft: "auto",
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 999,
+    padding: 6,
+    backgroundColor: colors.white,
+  },
   cardTitle: { color: colors.text, fontWeight: "700", fontSize: 16 },
   itemText: { color: colors.muted, lineHeight: 20 },
+  errorText: { color: "#A33A2A", lineHeight: 20 },
   metricsRow: { flexDirection: "row", gap: 10 },
   metricCard: {
     flex: 1,
@@ -157,6 +229,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 8,
     color: colors.text,
+  },
+  applyButton: {
+    marginTop: 8,
+    backgroundColor: colors.accent,
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: "center",
+  },
+  applyButtonText: {
+    color: "#FFFFFF",
+    fontWeight: "700",
   },
   links: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   linkButton: {
