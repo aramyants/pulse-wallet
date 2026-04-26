@@ -1,18 +1,28 @@
 import type { ReactElement } from "react";
 import { Link, router } from "expo-router";
-import { Check, CloudRain, CloudSun, Theater } from "lucide-react-native";
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import {
+  ArrowRight,
+  Check,
+  CloudRain,
+  CloudSun,
+  Compass,
+  Theater,
+} from "lucide-react-native";
+import {
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  ChannelPreview,
+  type ChannelStatus,
+} from "../src/components/ChannelPreview";
+import { Section } from "../src/components/Section";
 import { ScenarioName, useWalletStore } from "../src/store/walletStore";
-
-const colors = {
-  bg: "#F7F1E8",
-  card: "#FFF8EF",
-  white: "#FFFFFF",
-  text: "#1F1A17",
-  accent: "#8A4E2F",
-  border: "#E7D8C4",
-  muted: "#6D5B4C",
-};
+import { palette, radius, spacing, type, withAlpha } from "../src/theme";
 
 type ScenarioOption = {
   name: ScenarioName;
@@ -21,24 +31,26 @@ type ScenarioOption = {
   icon: ReactElement;
 };
 
-const options: ScenarioOption[] = [
+const ICON_PROPS = { size: 18, color: palette.accent } as const;
+
+const OPTIONS: ScenarioOption[] = [
   {
     name: "rainCafe",
-    label: "Rain + quiet café + nearby browsing user",
-    description: "Core hackathon story with strong contextual moment.",
-    icon: <CloudRain size={18} color={colors.accent} />,
+    label: "Rainy lunch - Cafe Muller",
+    description: "Quiet cafe in rain -> high-discount coffee alert",
+    icon: <CloudRain {...ICON_PROPS} />,
   },
   {
     name: "sunnyNormal",
-    label: "Sunny + normal demand + commuting user",
-    description: "Lower urgency, softer recommendation.",
-    icon: <CloudSun size={18} color={colors.accent} />,
+    label: "Sunny commute - Bakery Schmidt",
+    description: "Steady demand, on-the-go pastry nudge",
+    icon: <CloudSun {...ICON_PROPS} />,
   },
   {
     name: "eventDinner",
-    label: "Event nearby + low restaurant demand",
-    description: "Pre-event demand shaping for dinner traffic.",
-    icon: <Theater size={18} color={colors.accent} />,
+    label: "Pre-event - Noodle House",
+    description: "Empty tables before the venue fills up",
+    icon: <Theater {...ICON_PROPS} />,
   },
 ];
 
@@ -46,126 +58,117 @@ export default function DemoScreen() {
   const {
     scenarioName,
     scenarioEnabled,
-    context,
     setScenario,
     setScenarioEnabled,
-    weatherStatus,
-    weatherSource,
-    weatherError,
-    eventStatus,
-    eventSource,
-    eventError,
-    upcomingEventCount,
-    nextEventName,
-    locationStatus,
-    locationSource,
-    locationError,
+    offer,
+    context,
     locationCity,
-    demandStatus,
-    demandSource,
-    demandError,
-    quietRatio,
+    notificationSupport,
+    pushChannelStatus,
   } = useWalletStore();
+  const insets = useSafeAreaInsets();
+
+  const liveSelected = !scenarioEnabled;
+  const activeLabel = liveSelected
+    ? "Live - real GPS, weather, and merchants"
+    : OPTIONS.find((option) => option.name === scenarioName)?.label ?? "Scenario";
+
+  const cityLabel = liveSelected ? (locationCity ?? context.city) : context.city;
+  const isPending = offer.token === "PENDING";
+  const pushStatus: ChannelStatus =
+    notificationSupport === "denied" || notificationSupport === "unsupported"
+      ? "blocked"
+      : pushChannelStatus === "blocked"
+        ? "blocked"
+        : pushChannelStatus === "idle"
+          ? notificationSupport === "ready"
+            ? "idle"
+            : "blocked"
+          : pushChannelStatus;
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Scenario Switcher</Text>
-      <Text style={styles.subtitle}>Pick a context and regenerate the full wallet flow.</Text>
-      <TouchableOpacity
-        style={[styles.liveModeButton, !scenarioEnabled && styles.liveModeButtonActive]}
-        onPress={() => setScenarioEnabled(!scenarioEnabled)}
-      >
-        <Text style={styles.liveModeButtonText}>
-          {scenarioEnabled ? "Disable scenarios (use live context)" : "Scenarios disabled (live context active)"}
-        </Text>
-      </TouchableOpacity>
-
-      {options.map((option) => {
-        const selected = scenarioEnabled && scenarioName === option.name;
-        return (
-          <TouchableOpacity
-            key={option.name}
-            style={[styles.optionCard, selected && styles.optionCardSelected, !scenarioEnabled && styles.optionCardMuted]}
-            onPress={() => setScenario(option.name)}
-            disabled={!scenarioEnabled}
-          >
-            <View style={styles.optionTop}>
-              <View style={styles.optionTitleRow}>
-                {option.icon}
-                <Text style={styles.optionTitle}>{option.label}</Text>
-              </View>
-              {selected ? <Check size={18} color={colors.accent} /> : null}
-            </View>
-            <Text style={styles.optionDescription}>{option.description}</Text>
-          </TouchableOpacity>
-        );
-      })}
-
-      <View style={styles.summaryCard}>
-        <Text style={styles.summaryTitle}>Current Context Summary</Text>
-        <Text style={styles.summaryText}>City: {context.city}</Text>
-        <Text style={styles.summaryText}>
-          Weather: {context.weather.condition}, {context.weather.temperature}°C
-        </Text>
-        <Text style={styles.summaryText}>
-          Weather source:{" "}
-          {weatherStatus === "loading"
-            ? "loading OpenWeatherMap…"
-            : weatherSource === "live"
-              ? "OpenWeatherMap (live)"
-              : "demo fallback"}
-          {weatherError && weatherStatus === "error" ? ` — ${weatherError}` : ""}
-        </Text>
-        <Text style={styles.summaryText}>
-          Events source:{" "}
-          {eventStatus === "loading"
-            ? "loading Ticketmaster…"
-            : eventSource === "live"
-              ? `Ticketmaster (live), ${upcomingEventCount} found${nextEventName ? `, next: ${nextEventName}` : ""}`
-              : "demo fallback"}
-          {eventError && eventStatus === "error" ? ` — ${eventError}` : ""}
-        </Text>
-        <Text style={styles.summaryText}>
-          Location source:{" "}
-          {locationStatus === "loading"
-            ? "loading GPS…"
-            : scenarioEnabled
-              ? `Scenario city locked · ${context.city}`
-            : locationSource === "live"
-              ? `Device GPS (live)${locationCity ? ` · ${locationCity}` : ""}`
-              : "demo fallback"}
-          {locationError && locationStatus === "error" ? ` — ${locationError}` : ""}
-        </Text>
-        <Text style={styles.summaryText}>
-          Demand source:{" "}
-          {demandStatus === "loading"
-            ? "loading Payone feed…"
-            : demandSource === "payone-simulated"
-              ? `Payone simulated feed (quiet ratio: ${(quietRatio * 100).toFixed(1)}%)`
-              : "demo fallback"}
-          {demandError && demandStatus === "error" ? ` — ${demandError}` : ""}
-        </Text>
-        <Text style={styles.summaryText}>
-          Time: {context.time.day} {context.time.hour} ({context.time.period})
-        </Text>
-        <Text style={styles.summaryText}>Distance: {context.user.distanceToMerchantMeters}m</Text>
-        <Text style={styles.summaryText}>Intent: {context.user.abstractIntent}</Text>
-        <Text style={styles.summaryText}>
-          Demand: {context.merchant.currentDemand} ({context.merchant.transactionDensity}/
-          {context.merchant.normalTransactionDensity})
+    <ScrollView
+      style={styles.screen}
+      contentContainerStyle={[
+        styles.content,
+        { paddingBottom: spacing.xxxl + insets.bottom },
+      ]}
+    >
+      <View style={styles.header}>
+        <Text style={styles.eyebrow}>Scenarios</Text>
+        <Text style={styles.title}>Pick what to demo</Text>
+        <Text style={styles.subtitle}>
+          Live mode pulls real merchants near you. Scenarios run deterministic stories.
         </Text>
       </View>
 
-      <TouchableOpacity style={styles.demoButton} onPress={() => router.push("/")}>
-        <Text style={styles.demoButtonText}>Run customer demo</Text>
-      </TouchableOpacity>
+      <Section eyebrow="Active" title={activeLabel}>
+        <Pressable
+          style={[styles.optionCard, liveSelected && styles.optionCardSelected]}
+          onPress={() => setScenarioEnabled(false)}
+        >
+          <View style={styles.optionLeft}>
+            <View style={styles.optionIcon}>
+              <Compass size={18} color={palette.accent} />
+            </View>
+            <View style={styles.optionTextWrap}>
+              <Text style={styles.optionTitle}>Live context</Text>
+              <Text style={styles.optionDescription}>
+                Device GPS - weather - events - merchants - demand signal
+              </Text>
+            </View>
+          </View>
+          {liveSelected ? <Check size={18} color={palette.accent} /> : null}
+        </Pressable>
+      </Section>
 
-      <View style={styles.links}>
-        <Link href="/merchant" style={styles.linkButton}>
-          Merchant view
+      <Section eyebrow="Storyboards" title="Pre-built scenarios">
+        {OPTIONS.map((option) => {
+          const selected = scenarioEnabled && scenarioName === option.name;
+          return (
+            <Pressable
+              key={option.name}
+              style={[styles.optionCard, selected && styles.optionCardSelected]}
+              onPress={() => setScenario(option.name)}
+            >
+              <View style={styles.optionLeft}>
+                <View style={styles.optionIcon}>{option.icon}</View>
+                <View style={styles.optionTextWrap}>
+                  <Text style={styles.optionTitle}>{option.label}</Text>
+                  <Text style={styles.optionDescription}>{option.description}</Text>
+                </View>
+              </View>
+              {selected ? <Check size={18} color={palette.accent} /> : null}
+            </Pressable>
+          );
+        })}
+      </Section>
+
+      <Section eyebrow="Surfaces" title="How the offer shows up">
+        <ChannelPreview
+          offer={offer}
+          merchantName={context.merchant.name}
+          city={cityLabel}
+          pushStatus={pushStatus}
+          inAppStatus={isPending ? "idle" : "live"}
+        />
+        <Text style={styles.surfacesHint}>
+          Push alerts work in the installed app. Banner previews live here.
+        </Text>
+      </Section>
+
+      <Pressable style={styles.primaryButton} onPress={() => router.push("/")}>
+        <Text style={styles.primaryButtonText}>Open customer wallet</Text>
+        <ArrowRight size={14} color={palette.inkOnDark} />
+      </Pressable>
+
+      <View style={styles.footer}>
+        <Link href="/merchant" style={styles.footerLink}>
+          Merchant
         </Link>
-        <Link href="/redeem" style={styles.linkButton}>
-          Redeem view
+        <Text style={styles.footerDivider}>-</Text>
+        <Link href="/redeem" style={styles.footerLink}>
+          Redeem
         </Link>
       </View>
     </ScrollView>
@@ -173,74 +176,85 @@ export default function DemoScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: 18, gap: 12, paddingBottom: 30 },
-  title: { fontSize: 28, fontWeight: "800", color: colors.text },
-  subtitle: { color: colors.muted, marginTop: -2 },
-  liveModeButton: {
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
+  screen: { flex: 1, backgroundColor: palette.bg },
+  content: { padding: spacing.lg, gap: spacing.lg, paddingBottom: spacing.xxxl },
+
+  header: { gap: 4 },
+  eyebrow: {
+    ...type.micro,
+    color: palette.muted,
+    textTransform: "uppercase",
   },
-  liveModeButtonActive: {
-    borderColor: colors.accent,
-    backgroundColor: "#FBEED9",
-  },
-  liveModeButtonText: {
-    color: colors.text,
-    fontWeight: "700",
-    fontSize: 13,
-  },
+  title: { ...type.title, color: palette.ink },
+  subtitle: { ...type.small, color: palette.muted, lineHeight: 18 },
+
   optionCard: {
-    backgroundColor: colors.card,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: palette.surface,
     borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 14,
-    padding: 14,
-    gap: 6,
+    borderColor: palette.border,
+    borderRadius: radius.lg,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    gap: spacing.sm,
   },
   optionCardSelected: {
-    borderColor: colors.accent,
-    borderWidth: 1.5,
-    backgroundColor: "#FBEED9",
+    borderColor: palette.accent,
+    backgroundColor: withAlpha(palette.accent, "0F"),
   },
-  optionCardMuted: {
-    opacity: 0.45,
-  },
-  optionTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 8 },
-  optionTitleRow: { flexDirection: "row", alignItems: "center", gap: 8, flex: 1 },
-  optionTitle: { color: colors.text, fontWeight: "700", flexShrink: 1 },
-  optionDescription: { color: colors.muted, lineHeight: 20 },
-  summaryCard: {
-    backgroundColor: colors.white,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 14,
-    gap: 4,
-  },
-  summaryTitle: { color: colors.text, fontWeight: "800", fontSize: 16, marginBottom: 4 },
-  summaryText: { color: colors.muted },
-  demoButton: {
-    backgroundColor: colors.accent,
-    borderRadius: 14,
-    paddingVertical: 13,
+  optionLeft: {
+    flexDirection: "row",
     alignItems: "center",
+    gap: spacing.sm,
+    flex: 1,
   },
-  demoButtonText: { color: "#FFFFFF", fontWeight: "700", fontSize: 15 },
-  links: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
-  linkButton: {
-    backgroundColor: colors.white,
-    color: colors.accent,
+  optionIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 9,
+    backgroundColor: palette.surfaceAlt,
     borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 999,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    overflow: "hidden",
-    fontWeight: "700",
+    borderColor: palette.border,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  optionTextWrap: { flex: 1, gap: 2 },
+  optionTitle: { ...type.bodyStrong, color: palette.ink },
+  optionDescription: { ...type.small, color: palette.muted, lineHeight: 16 },
+
+  primaryButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: palette.ink,
+    borderRadius: radius.md,
+    paddingVertical: 14,
+    minHeight: 50,
+  },
+  primaryButtonText: {
+    color: palette.inkOnDark,
+    fontWeight: "800",
+    fontSize: 14,
+    letterSpacing: 0.2,
+  },
+
+  footer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+  },
+  footerLink: { color: palette.muted, fontSize: 12, fontWeight: "600" },
+  footerDivider: { color: palette.border, fontSize: 12 },
+
+  surfacesHint: {
+    color: palette.muted,
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: "500",
+    marginTop: spacing.xs,
   },
 });

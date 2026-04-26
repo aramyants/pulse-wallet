@@ -31,30 +31,36 @@ function clamp(value: number, min: number, max: number) {
 
 function buildOfferPrompt(context: DemoContext) {
   return [
-    "Generate one mobile wallet offer as strict JSON only. Think about How does the offer address the user? Factual-informative ('15% off at Café Müller, 300m away') or emotional-situational ('Cold outside? Your cappuccino is waiting.')?",
-    "Respond with strict JSON only (no markdown, no prose) using this shape:",
+    "You are the Generative City Wallet offer engine. Generate ONE local offer that fits the user's current real-world context.",
+    "The merchant might be food, drink, quick service, entertainment (cinema/theatre/club), culture (museum/gallery/library), retail (bookstore, supermarket, florist, boutique...) or leisure (park, gym, attraction). Adapt language to the category — never default to 'coffee' if it doesn't fit.",
+    "Tone: choose factual-informative (e.g. '15% off at Café Müller, 300m away') OR emotional-situational (e.g. 'Cold outside? Your cappuccino is waiting.') — pick whichever the context implies.",
+    "Output strict JSON only (no markdown, no prose) matching exactly:",
     '{"title":"string","subtitle":"string","discount":number,"expiresInMinutes":number,"tone":"emotional|informative","reasons":["string"],"privacyNote":"string","widgetStyle":{"background":"#RRGGBB","accent":"#RRGGBB","mood":"string"}}',
     "",
     "Rules:",
-    "- Keep title under 70 chars.",
-    "- Keep subtitle under 90 chars.",
-    "- Discount must be between 5 and merchant max discount.",
-    "- Expires must be 8 to 45 minutes.",
-    "- Mention city or local context naturally.",
-    "- reasons must be 3-5 short bullet-like strings.",
-    "- privacyNote must mention abstract intent and no raw GPS sharing.",
-    "- widgetStyle background/accent must be valid hex colors.",
+    "- Title <= 70 chars, subtitle <= 90 chars.",
+    "- discount: integer between 5 and the merchant max discount.",
+    "- expiresInMinutes: integer 8-45.",
+    "- Mention city or a real-world cue (weather, time, distance) naturally.",
+    "- reasons: 3-5 short strings; the FIRST reason must be the strongest signal (weather / demand / time / distance).",
+    "- privacyNote: must mention abstract intent and explicitly state no raw GPS is shared.",
+    "- widgetStyle.background and widgetStyle.accent: valid #RRGGBB hex; ensure accent contrasts the background.",
+    "- Never invent merchant features or events that are not in the context.",
     "",
     `Context city: ${context.city}`,
     `Weather: ${context.weather.condition}, ${context.weather.temperature}C`,
-    `Time: ${context.time.period} at ${context.time.hour}`,
+    `Time: ${context.time.period} at ${context.time.hour} (${context.time.day})`,
     `User distance: ${context.user.distanceToMerchantMeters}m`,
-    `User intent: ${context.user.abstractIntent}`,
+    `User abstract intent: ${context.user.abstractIntent}`,
+    context.user.preference
+      ? `User taste hint (on-device only): leans toward ${context.user.preference}`
+      : "User taste hint: none yet",
     `Merchant: ${context.merchant.name} (${context.merchant.category})`,
     `Merchant demand: ${context.merchant.currentDemand}`,
     `Density: ${context.merchant.transactionDensity}/${context.merchant.normalTransactionDensity}`,
     `Merchant max discount: ${context.merchant.maxDiscount}`,
     `Merchant target product: ${context.merchant.targetProduct}`,
+    `Merchant goal: ${context.merchant.goal}`,
   ].join("\n");
 }
 
@@ -121,32 +127,151 @@ function parseReasons(value: unknown): string[] {
     .slice(0, 5);
 }
 
+type CategoryGroup =
+  | "food"
+  | "drink"
+  | "quick_service"
+  | "entertainment"
+  | "culture"
+  | "retail"
+  | "leisure"
+  | "generic";
+
+function inferCategoryGroup(category: string): CategoryGroup {
+  const c = category.toLowerCase();
+  if (c.includes("café") || c.includes("cafe") || c.includes("coffee")) return "drink";
+  if (c.includes("bar") || c.includes("pub") || c.includes("club")) return "drink";
+  if (c.includes("bakery") || c.includes("restaurant") || c.includes("bistro")) return "food";
+  if (c.includes("ice cream") || c.includes("deli") || c.includes("quick")) return "quick_service";
+  if (c.includes("cinema") || c.includes("theatre") || c.includes("arts")) return "entertainment";
+  if (c.includes("museum") || c.includes("gallery") || c.includes("library")) return "culture";
+  if (
+    c.includes("supermarket") ||
+    c.includes("convenience") ||
+    c.includes("bookstore") ||
+    c.includes("boutique") ||
+    c.includes("florist") ||
+    c.includes("gift shop")
+  )
+    return "retail";
+  if (c.includes("park") || c.includes("viewpoint") || c.includes("attraction") || c.includes("gym"))
+    return "leisure";
+  return "generic";
+}
+
+function pickFallbackTitle(context: DemoContext, group: CategoryGroup): string {
+  const { merchant, weather, time } = context;
+  const period = time.period.toLowerCase();
+  const isCold = weather.condition === "Rain" || weather.temperature <= 12;
+  const isWarm = weather.condition === "Sunny" && weather.temperature >= 18;
+
+  switch (group) {
+    case "drink":
+      if (isCold) return `Warm break at ${merchant.name}`;
+      if (period.includes("morning")) return `Morning fix at ${merchant.name}`;
+      if (period.includes("evening") || period.includes("night"))
+        return `Evening pour at ${merchant.name}`;
+      return `${merchant.name} — quiet hour, your seat`;
+    case "food":
+      if (period.includes("lunch")) return `Lunch at ${merchant.name}`;
+      if (period.includes("evening")) return `Dinner at ${merchant.name}`;
+      if (period.includes("morning")) return `Fresh bake at ${merchant.name}`;
+      return `Local plate at ${merchant.name}`;
+    case "quick_service":
+      return `${merchant.name} — quick stop on the way`;
+    case "entertainment":
+      if (period.includes("evening") || period.includes("night"))
+        return `Tonight at ${merchant.name}`;
+      return `Quiet show at ${merchant.name}`;
+    case "culture":
+      if (isCold) return `Stay dry inside ${merchant.name}`;
+      if (isWarm && period.includes("afternoon"))
+        return `Afternoon visit to ${merchant.name}`;
+      return `${merchant.name} — quiet hour visit`;
+    case "retail":
+      if (isCold) return `Indoor browse at ${merchant.name}`;
+      if (period.includes("evening")) return `End-of-day pick at ${merchant.name}`;
+      return `${merchant.name} — local pick`;
+    case "leisure":
+      if (isWarm) return `Sunny detour: ${merchant.name}`;
+      if (isCold) return `Indoor swap from ${merchant.name}`;
+      return `Drop-in at ${merchant.name}`;
+    case "generic":
+    default:
+      return `${merchant.name} — local offer`;
+  }
+}
+
+function pickFallbackSubtitle(
+  context: DemoContext,
+  discount: number,
+  group: CategoryGroup,
+): string {
+  const product = context.merchant.targetProduct;
+  const distance = context.user.distanceToMerchantMeters;
+  const distanceCue = distance > 0 ? `${distance} m away` : "in walking range";
+  switch (group) {
+    case "drink":
+    case "food":
+    case "quick_service":
+      return `${discount}% cashback on ${product} • ${distanceCue}`;
+    case "entertainment":
+      return `${discount}% off ${product} tonight • ${distanceCue}`;
+    case "culture":
+      return `${discount}% off ${product} • ${distanceCue}`;
+    case "retail":
+      return `${discount}% back on ${product} • ${distanceCue}`;
+    case "leisure":
+      return `${discount}% off ${product} • ${distanceCue}`;
+    default:
+      return `${discount}% cashback on ${product} • ${distanceCue}`;
+  }
+}
+
 function buildLocalFallbackOffer(context: DemoContext): GeneratedOffer {
-  const isNearby = context.user.distanceToMerchantMeters <= 200;
-  const discount = clamp(isNearby ? 12 : 8, 5, context.merchant.maxDiscount);
+  const group = inferCategoryGroup(context.merchant.category);
+  const isNearby = context.user.distanceToMerchantMeters <= 250;
+  const isQuiet = context.merchant.currentDemand === "low";
+  const baseDiscount = isQuiet ? 16 : isNearby ? 12 : 9;
+  const discount = clamp(baseDiscount, 5, context.merchant.maxDiscount);
+
+  const reasons = [
+    isQuiet
+      ? `${context.merchant.name} is below normal volume`
+      : isNearby
+        ? `Within ${context.user.distanceToMerchantMeters} m`
+        : `${context.weather.condition}, ${context.weather.temperature}°C`,
+    `${context.time.period} in ${context.city}`,
+    `Demand is ${context.merchant.currentDemand}`,
+  ];
+
   return {
     id: `offer-${Date.now()}`,
     merchantName: context.merchant.name,
     targetProduct: context.merchant.targetProduct,
     token: makeToken(),
-    title: isNearby ? `${context.merchant.name} is nearby` : `Local offer at ${context.merchant.name}`,
-    subtitle: `${discount}% cashback on ${context.merchant.targetProduct} • ${context.user.distanceToMerchantMeters}m away`,
+    title: pickFallbackTitle(context, group),
+    subtitle: pickFallbackSubtitle(context, discount, group),
     discount,
     expiresInMinutes: 20,
-    tone: "informative",
-    reasons: [
-      `${context.weather.condition}, ${context.weather.temperature}C`,
-      `${context.time.period} in ${context.city}`,
-      `Demand is ${context.merchant.currentDemand}`,
-    ],
-    privacyNote: "Generated from abstract intent and local context without sharing raw GPS.",
+    tone: isQuiet ? "emotional" : "informative",
+    reasons,
+    privacyNote:
+      "Generated from abstract intent and local context. No raw GPS or identity is shared.",
     widgetStyle: {
       background: "#FFFFFF",
-      accent: "#1F1A17",
-      mood: "calm, local, reliable",
+      accent: "#7A2811",
+      mood: isQuiet ? "calm, inviting" : "calm, local, reliable",
     },
   };
 }
+
+// Track endpoints whose first attempt already logged a warning; this keeps the
+// dev console quiet when the API server is intentionally not running. We still
+// retry on every call (so the moment the server comes up, the next offer is
+// "live"), but we only print one warning per endpoint per session.
+const warnedEndpoints = new Set<string>();
+let warnedFallback = false;
 
 export async function generateOffer(context: DemoContext): Promise<GeneratedOffer> {
   const baseUrls = buildCandidateApiBaseUrls();
@@ -179,7 +304,6 @@ export async function generateOffer(context: DemoContext): Promise<GeneratedOffe
       }
 
       const data = await response.json();
-      console.log(data)
       const rawText = data?.response;
       if (typeof rawText !== "string" || !rawText.trim()) {
         const message = "Ollama returned an empty response.";
@@ -241,7 +365,16 @@ export async function generateOffer(context: DemoContext): Promise<GeneratedOffe
     } catch (error) {
       lastError = error;
       const message = error instanceof Error ? error.message : String(error);
-      console.warn("[offerEngine] API generation attempt failed via", endpoint, message);
+      if (!warnedEndpoints.has(endpoint)) {
+        warnedEndpoints.add(endpoint);
+        console.warn(
+          "[offerEngine] API not reachable at",
+          endpoint,
+          "— using local fallback. (",
+          message,
+          ")",
+        );
+      }
       if (/timeout|network request failed/i.test(message)) {
         // Network/timeouts are unlikely to recover immediately; avoid repeated long waits.
         break;
@@ -249,9 +382,12 @@ export async function generateOffer(context: DemoContext): Promise<GeneratedOffe
     }
   }
 
-  if (lastError instanceof Error) {
-    console.warn("[offerEngine] Falling back to local deterministic offer after API failures:", lastError.message);
-    return buildLocalFallbackOffer(context);
+  if (lastError instanceof Error && !warnedFallback) {
+    warnedFallback = true;
+    console.warn(
+      "[offerEngine] Live LLM offline → deterministic local offers.",
+      "Start the API with `npm run api:redeem` and ensure Ollama is running.",
+    );
   }
 
   return buildLocalFallbackOffer(context);

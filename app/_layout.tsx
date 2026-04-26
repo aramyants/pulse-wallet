@@ -1,42 +1,72 @@
 import { Stack } from "expo-router";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
+import { AppState, StatusBar } from "react-native";
+import { SafeAreaProvider } from "react-native-safe-area-context";
+import {
+  onNotificationDelivered,
+  onNotificationOpened,
+  setupNotifications,
+} from "../src/services/notifications";
 import { useWalletStore } from "../src/store/walletStore";
-
-const colors = {
-  bg: "#F7F1E8",
-  card: "#FFF8EF",
-  text: "#1F1A17",
-  accent: "#8A4E2F",
-  border: "#E7D8C4",
-};
+import { palette } from "../src/theme";
 
 export default function RootLayout() {
-  const refreshWeather = useWalletStore((s) => s.refreshWeather);
-  const refreshEvents = useWalletStore((s) => s.refreshEvents);
-  const refreshLocation = useWalletStore((s) => s.refreshLocation);
-  const refreshDemand = useWalletStore((s) => s.refreshDemand);
+  const refreshAll = useWalletStore((s) => s.refreshAll);
+  const markPushDelivered = useWalletStore((s) => s.markPushDelivered);
+  const markPushOpened = useWalletStore((s) => s.markPushOpened);
+  const refreshNotificationSupport = useWalletStore(
+    (s) => s.refreshNotificationSupport,
+  );
+  const booted = useRef(false);
 
   useEffect(() => {
-    void refreshLocation();
-    void refreshWeather();
-    void refreshEvents();
-    void refreshDemand();
-  }, [refreshLocation, refreshWeather, refreshEvents, refreshDemand]);
+    if (booted.current) return;
+    booted.current = true;
+
+    void setupNotifications();
+    void refreshNotificationSupport();
+    void refreshAll();
+
+    const offDelivered = onNotificationDelivered((offerId) => {
+      markPushDelivered(offerId);
+    });
+    const offOpened = onNotificationOpened((offerId) => {
+      markPushOpened(offerId);
+    });
+    const appStateSub = AppState.addEventListener("change", (state) => {
+      if (state === "active") {
+        void refreshNotificationSupport();
+      }
+    });
+
+    return () => {
+      offDelivered();
+      offOpened();
+      appStateSub.remove();
+    };
+  }, [refreshAll, markPushDelivered, markPushOpened, refreshNotificationSupport]);
 
   return (
-    <Stack
-      screenOptions={{
-        headerStyle: { backgroundColor: colors.card },
-        headerTintColor: colors.text,
-        headerTitleStyle: { fontWeight: "700" },
-        contentStyle: { backgroundColor: colors.bg },
-        headerShadowVisible: false,
-      }}
-    >
-      <Stack.Screen name="index" options={{ title: "PulseWallet" }} />
-      <Stack.Screen name="merchant" options={{ title: "Merchant Dashboard" }} />
-      <Stack.Screen name="redeem" options={{ title: "Redeem Offer" }} />
-      <Stack.Screen name="demo" options={{ title: "Demo Scenarios" }} />
-    </Stack>
+    <SafeAreaProvider>
+      <StatusBar barStyle="dark-content" backgroundColor={palette.bg} />
+      <Stack
+        screenOptions={{
+          headerStyle: { backgroundColor: palette.bg },
+          headerTintColor: palette.ink,
+          headerTitleStyle: {
+            fontWeight: "700",
+            fontSize: 16,
+          },
+          contentStyle: { backgroundColor: palette.bg },
+          headerShadowVisible: false,
+          headerBackTitle: "Back",
+        }}
+      >
+        <Stack.Screen name="index" options={{ title: "City Wallet" }} />
+        <Stack.Screen name="merchant" options={{ title: "Merchant" }} />
+        <Stack.Screen name="redeem" options={{ title: "Redeem" }} />
+        <Stack.Screen name="demo" options={{ title: "Scenarios" }} />
+      </Stack>
+    </SafeAreaProvider>
   );
 }
