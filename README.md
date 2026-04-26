@@ -104,7 +104,19 @@ never invents a merchant.
 
 ```bash
 npm install
+```
+
+**macOS / Linux**
+
+```bash
 cp .env.example .env   # then fill in keys
+npx expo start
+```
+
+**Windows (PowerShell)**
+
+```powershell
+Copy-Item .env.example .env
 npx expo start
 ```
 
@@ -124,9 +136,11 @@ npx expo start
 | `EXPO_PUBLIC_PUSH_DISTANCE_M`         | Maximum walking distance to push                    | optional      |
 | `EXPO_PUBLIC_ZYTE_API_KEY`            | Optional: route Overpass via Zyte when IP-blocked   | optional      |
 
-The Ollama backend lives in `backend/` (run `npm run dev` there). If unreachable,
-the offer engine returns a deterministic local fallback so the demo never
-breaks.
+The mobile app supports an external offer-generation backend via
+`EXPO_PUBLIC_OFFER_API_BASE_URL` (optional). This repository currently ships the
+redemption API only (`server/redeemApi.js`, run with `npm run api:redeem`).
+If the offer backend is unreachable, the offer engine returns a deterministic
+local fallback so the demo never breaks.
 
 If `EXPO_PUBLIC_PAYONE_API_BASE_URL` is unset, the wallet uses a deterministic
 demand simulator that is **clearly labeled "Payone (simulator)"** in both the
